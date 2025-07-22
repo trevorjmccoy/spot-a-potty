@@ -13,7 +13,7 @@ class Restroom(Base):
     latitude: Mapped[float]
     longitude: Mapped[float]
     rating: Mapped[int]
-    image_filename: Mapped[Optional[str]]
+    image_filename: Mapped[Optional[str]] = mapped_column(nullable=True, default=None)
 
     __table_args__ = (
         CheckConstraint("latitude BETWEEN -90 AND 90", name="check_latitude_range"),

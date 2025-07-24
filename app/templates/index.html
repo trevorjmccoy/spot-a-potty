@@ -30,12 +30,147 @@
 
     <script>
         // Create map, attribution, and tiles
-        const map = L.map('map').setView([42.3555, -71.0565], 17);
+        const map = L.map('map').setView([42.0001, -71.3292], 17);
         const attribution = '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>';
         const tileUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
         const tiles = L.tileLayer(tileUrl, { attribution });
         // Mount tiles
-        tiles.addTo(map)
+        tiles.addTo(map);
+
+        // Fetch and display all saved restrooms
+        fetch('/restrooms/')
+            .then(response => {
+                if (!response.ok) throw new Error("Failed to fetch restrooms");
+                return response.json();
+            })
+            .then(restrooms => {
+                restrooms.forEach(r => {
+                    const marker = L.marker([r.latitude, r.longitude]).addTo(map);
+                    let popupHtml = `
+                        <strong>${r.name}</strong><br/>
+                        Rating: ${r.rating}<br/>
+                        <button type="button" id="deleteButton${r.id}">Delete</button>
+                    `;
+                    if (r.image_filename) {
+                        popupHtml += `<br/><img src="/uploads/${r.image_filename}" width="100" />`;
+                    }
+
+                    marker.bindPopup(popupHtml);
+
+                    // Attach event listeners when popup opens
+                    marker.on('popupopen', () => {
+                        // Delete
+                        const deleteButton = document.getElementById(`deleteButton${r.id}`);
+                        deleteButton.addEventListener("click", () => {deleteRestroom(r.id, r.image_filename, marker)});
+                    });
+                });
+            })
+            .catch(err => {
+                console.error("Error loading restrooms:", err);
+            });
+
+        // Delete pin
+        function deleteRestroom(id, image_filename, marker) {
+            fetch(`/restrooms/${id}`, {
+                method:"DELETE",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ image_filename: image_filename }) // send image_filename to backend to be deleted
+            })
+            .then(response => {
+                if (!response.ok) throw new Error('failed to delete restroom');
+                // Remove marker from map
+                marker.remove();
+            })
+            .catch(error => {
+                console.error("Delete error:", error);
+            });
+        }
+
+        // Update pin
+        
+
+        // Click handler to show form popup
+        map.on('click', function(event) {
+            const { lat, lng } = event.latlng;
+
+            const formHtml = `
+                <form id="restroomForm" enctype="multipart/form-data">
+                    <label>Name: <input type="text" name="name" required /></label><br/>
+                    <label>Rating (1-5): <input type="number" name="rating" min="1" max="5" required></label><br/>
+                    <label>Image File: <input type="file" name="image_file" accept="image/*" /></label><br/>
+                    <button type="submit">Add Restroom</button>
+                </form>
+            `;
+
+
+            const popup = L.popup()
+                .setLatLng([lat, lng])
+                .setContent(formHtml)
+                .openOn(map);
+
+            // Slight delay to ensure DOM is fully rendered
+            setTimeout(() => {
+                const form = document.getElementById('restroomForm');
+                if (form) {
+                    form.addEventListener('submit', function(ev) {
+                        ev.preventDefault();
+
+                        const formData = new FormData(form);
+                        formData.append("latitude", lat);
+                        formData.append("longitude", lng);
+
+                        fetch("/restrooms/", {
+                            method: "POST",
+                            body: formData
+                        })
+                            .then(async response => {
+                                if (!response.ok) {
+                                    const err = await response.text();
+                                    throw new Error(err);
+                                }
+                                return response.json();
+                            })
+                            .then(json => {
+                                alert("Restroom added!");
+                                map.closePopup();
+
+                                const marker = L.marker([lat, lng]).addTo(map);
+                                let popupHtml = `<strong>${json.name}</strong><br/>Rating: ${json.rating}`;
+                                if (json.image_filename) {
+                                    popupHtml += `<br/><img src="/uploads/${json.image_filename}" width="100" />`;
+                                }
+                                marker.bindPopup(popupHtml).openPopup();
+                            })
+                            .catch(err => {
+                                alert("Error: " + err.message);
+                            });
+                    });
+                }
+            }, 100);
+        })
     </script>
+
 </body>
 </html>
+
+
+<!--
+FROM GOOGLE: 
+Sending data from a JavaScript frontend to a backend typically involves making an HTTP request to an API endpoint on the server. The most common methods are: Using the fetch API (Modern Approach).
+This is the recommended and most modern way to make HTTP requests in JavaScript. It returns a Promise, making asynchronous operations easier to handle.
+
+const dataToSend = { name: "John Doe", email: "john@example.com" };
+
+fetch('/api/submit-data', {
+    method: 'POST', // or 'PUT', 'DELETE', etc.
+    headers: {
+        'Content-Type': 'application/json' // Specify the content type
+    },
+    body: JSON.stringify(dataToSend) // Convert data to JSON string
+})
+.then(response => response.json()) // Parse the JSON response from the backend
+.then(data => console.log('Success:', data))
+.catch(error => console.error('Error:', error));
+-->

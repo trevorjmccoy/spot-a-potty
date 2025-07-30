@@ -31,24 +31,25 @@ class RestroomUpdate(BaseModel):
 class RestroomForm:
     def __init__(
         self,
-        name: str = Form(...),
-        latitude: float = Form(...),
-        longitude: float = Form(...),
-        rating: int = Form(...),
-        image_file: Optional[UploadFile] = File(None) # does this need Optional[...]?
+        name: Optional[str] = Form(None),
+        latitude: Optional[float] = Form(None),
+        longitude: Optional[float] = Form(None),
+        rating: Optional[str] = Form(None),
+        image_file: Optional[UploadFile] = File(None)
     ):
-        self.name = name
-        self.latitude = latitude
-        self.longitude = longitude
-        self.rating = rating
-        self.image_file = image_file
+        # Convert blank strings from empty form data to None 
+        self.name = name.strip() if name not in (None, "", "null") else None
+        self.latitude = float(latitude) if latitude not in (None, "", "null") else None
+        self.longitude = float(longitude) if longitude not in (None, "", "null") else None
+        self.rating = int(rating) if rating and str(rating).strip().isdigit() else None
+        self.image_file = image_file if image_file and image_file.filename else None
 
-    def to_schema(self):
-        return RestroomCreate(
+    def to_schema(self, filename_override: Optional[str] = None):
+        return RestroomUpdate(
             name = self.name,
             latitude = self.latitude,
             longitude = self.longitude,
             rating = self.rating,
-            image_filename = self.image_file.filename if self.image_file else None
+            image_filename = filename_override # Only set if a new image is uploaded
         )
         

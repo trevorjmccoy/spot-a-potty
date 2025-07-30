@@ -68,40 +68,45 @@
         // Render display popup * definition *
         function renderDisplayPopup(marker, restroom) {
             let popupHtml = `
-                        <strong>${restroom.name}</strong><br/>
-                        Rating: ${restroom.rating}<br/>
-                        <button type="button" id="deleteButton${restroom.id}">Delete</button>
-                        <button type="button" id="showEditFormButton${restroom.id}">Edit</button>
-                    `;
-                    if (restroom.image_filename) {
-                        popupHtml += `<br/><img src="/uploads/${restroom.image_filename}" width="100" />`;
-                    }
+                    <strong>${restroom.name}</strong><br/>
+                    Rating: ${restroom.rating}<br/>
+                    <button type="button" id="deleteButton${restroom.id}">Delete</button>
+                    <button type="button" id="renderEditPopupButton${restroom.id}">Edit</button>
+            `;
+            if (restroom.image_filename) {
+                popupHtml += `<br/><img src="/uploads/${restroom.image_filename}" width="100" />`;
+            }
 
-                    marker.bindPopup(popupHtml);
+            marker.bindPopup(popupHtml);
 
-                    // Detach any old event listeners to avoid double layering events when updating
-                    marker.off('popupopen');
-                    marker.off('popupclose');
-                    // Attach event listeners when popup opens
-                    marker.on('popupopen', (e) => {
-                        const popup = e.popup;
-                        // Delete pin * execution *
-                        const deleteButton = document.getElementById(`deleteButton${restroom.id}`);
-                        if (deleteButton) {
-                            deleteButton.addEventListener("click", (event) => {
-                                event.stopPropagation(); // Eliminate issue of clicking map behind button while clicking button
-                                deleteRestroom(restroom.id, marker)
-                            });
-                        }
-                        // Update pin * execution *
-                        const showEditFormButton = document.getElementById(`showEditFormButton${restroom.id}`);
-                        if (showEditFormButton) {
-                            showEditFormButton.addEventListener("click", (event) => {
-                                event.stopPropagation(); // Eliminate issue of clicking map behind button while clicking button
-                                showEditForm(restroom, popup, marker)
-                            });
-                        }
+            // Detach any old event listeners to avoid double layering events when updating
+            marker.off('popupopen');
+            marker.off('popupclose');
+
+            const attachHandlers = () => {
+                // Delete pin * execution *
+                const deleteButton = document.getElementById(`deleteButton${restroom.id}`);
+                if (deleteButton) {
+                    deleteButton.addEventListener("click", (event) => {
+                        event.stopPropagation(); // Eliminate issue of clicking map behind button while clicking button
+                        deleteRestroom(restroom.id, marker);
                     });
+                }
+                // Update pin * execution *
+                const renderEditPopupButton = document.getElementById(`renderEditPopupButton${restroom.id}`);
+                if (renderEditPopupButton) {
+                    renderEditPopupButton.addEventListener("click", (event) => {
+                        event.stopPropagation(); // Eliminate issue of clicking map behind button while clicking button
+                        renderEditPopup(restroom, marker.getPopup(), marker);
+                    });
+                }
+            };
+            // Attach event listeners when popup opens
+            marker.on('popupopen', attachHandlers);
+            // Attach immediately if popup is already open
+            if (marker.isPopupOpen()) {
+                setTimeout(attachHandlers, 50);
+            }
         }
         
         // Delete pin * definition *
@@ -119,8 +124,8 @@
             });
         }
 
-        // Update pin * definition *
-        function showEditForm(restroom, popup, marker) {
+        // Render edit popup * definition *
+        function renderEditPopup(restroom, popup, marker) {
             const formHtml = `
                 <form id="editForm" enctype="multipart/form-data">
                     <label>Name: <input type="text" name="name" /></label><br/>
@@ -146,40 +151,46 @@
                 if (form) {
                     form.addEventListener('submit', function(event) {
                         event.preventDefault();
-
-                        const formData = new FormData(form);
-                        for (let [key, value] of formData.entries()) {
-                            if (value === "" || value === "null" || value === undefined) {
-                                formData.delete(key);
-                            }
-                        }
-
-                        fetch(`/restrooms/${restroom.id}`, {
-                            method: "PATCH",
-                            body: formData
-                        })
-                            .then(async response => {
-                                if (!response.ok) {
-                                    const error = await response.text();
-                                    throw new Error(error);
-                                }
-                                return response.json();
-                            })
-                            .then(json => {
-                                alert("Restroom updated!");
-                                map.closePopup();
-
-                                renderDisplayPopup(marker, json);
-                                marker.openPopup();
-                            })
-                            .catch(error => {
-                                alert("Error: " + error.message);
-                            });
+                        // Update pin * execution *
+                        updatePin(restroom, form, marker);
                     });
                 }
             }, 100);
         }
 
+        // Update pin * definition *
+        function updatePin(restroom, form, marker) {
+            const formData = new FormData(form);
+            for (let [key, value] of formData.entries()) {
+                if (value === "" || value === "null" || value === undefined) {
+                    formData.delete(key);
+                }
+            }
+
+            fetch(`/restrooms/${restroom.id}`, {
+                method: "PATCH",
+                body: formData
+            })
+                .then(async response => {
+                    if (!response.ok) {
+                        const error = await response.text();
+                        throw new Error(error);
+                    }
+                    return response.json();
+                })
+                .then(json => {
+                    alert("Restroom updated!");
+                    // Update existing object with new data
+                    Object.assign(restroom, json);
+                    map.closePopup();
+
+                    renderDisplayPopup(marker, json);
+                    marker.openPopup();
+                })
+                .catch(error => {
+                    alert("Error: " + error.message);
+                });
+            }
 
 
         // Add pin * definition *

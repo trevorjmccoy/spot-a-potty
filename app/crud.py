@@ -49,14 +49,28 @@ def update_restroom_by_id(db: Session, restroom_id: int, update_data: RestroomUp
     if not restroom:
         raise HTTPException(status_code=404, detail="Restroom not found")
     
-    # update only the included fields
-    update_fields = update_data.model_dump(exclude_unset=True)
+    # Update only the included fields (fields that are not None)
+    update_fields = {
+        attr: value for attr, value in update_data.model_dump(exclude_unset=True).items()
+        if value is not None
+    }
+
     for attr, value in update_fields.items():
         setattr(restroom, attr, value)
 
     db.commit()
     db.refresh(restroom)
 
+    return restroom
+
+# Add restroom id before image filename to decrease risk of multiples
+def update_restroom_image_filename(db: Session, restroom_id: int, filename: str):
+    restroom = db.get(Restroom, restroom_id)
+    if not restroom:
+        raise ValueError(f"Restroom with ID {restroom_id} not found")
+    restroom.image_filename = filename
+    db.commit()
+    db.refresh(restroom)
     return restroom
 
 

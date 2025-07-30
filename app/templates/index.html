@@ -29,13 +29,22 @@
     <div id="map"></div>
 
     <script>
-        // Create map, attribution, and tiles
+        // Create map, tiles, and attribution display
         const map = L.map('map').setView([42.0001, -71.3292], 17);
         const attribution = '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>';
         const tileUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
         const tiles = L.tileLayer(tileUrl, { attribution });
         // Mount tiles
         tiles.addTo(map);
+
+        // Disable map click when popups are open 
+        map.on('popupopen', () => {
+            map.off('click');
+        });
+        // Re-enable map click when popups are closed
+        map.on('popupclose', () => {
+            map.on('click', addRestroom);
+        });
 
         // Fetch and display all saved restrooms
         fetch('/restrooms/')
@@ -44,39 +53,61 @@
                 return response.json();
             })
             .then(restrooms => {
-                restrooms.forEach(r => {
-                    const marker = L.marker([r.latitude, r.longitude]).addTo(map);
-                    let popupHtml = `
-                        <strong>${r.name}</strong><br/>
-                        Rating: ${r.rating}<br/>
-                        <button type="button" id="deleteButton${r.id}">Delete</button>
-                    `;
-                    if (r.image_filename) {
-                        popupHtml += `<br/><img src="/uploads/${r.image_filename}" width="100" />`;
-                    }
-
-                    marker.bindPopup(popupHtml);
-
-                    // Attach event listeners when popup opens
-                    marker.on('popupopen', () => {
-                        // Delete
-                        const deleteButton = document.getElementById(`deleteButton${r.id}`);
-                        deleteButton.addEventListener("click", () => {deleteRestroom(r.id, r.image_filename, marker)});
-                    });
+                restrooms.forEach(restroom => {
+                    const marker = L.marker([restroom.latitude, restroom.longitude]).addTo(map);
+                    renderDisplayPopup(marker, restroom);
                 });
             })
             .catch(err => {
                 console.error("Error loading restrooms:", err);
             });
 
-        // Delete pin
-        function deleteRestroom(id, image_filename, marker) {
-            fetch(`/restrooms/${id}`, {
+        // Add pin * execution *
+        map.on('click', addRestroom);
+
+        // Render display popup * definition *
+        function renderDisplayPopup(marker, restroom) {
+            let popupHtml = `
+                        <strong>${restroom.name}</strong><br/>
+                        Rating: ${restroom.rating}<br/>
+                        <button type="button" id="deleteButton${restroom.id}">Delete</button>
+                        <button type="button" id="showEditFormButton${restroom.id}">Edit</button>
+                    `;
+                    if (restroom.image_filename) {
+                        popupHtml += `<br/><img src="/uploads/${restroom.image_filename}" width="100" />`;
+                    }
+
+                    marker.bindPopup(popupHtml);
+
+                    // Detach any old event listeners to avoid double layering events when updating
+                    marker.off('popupopen');
+                    marker.off('popupclose');
+                    // Attach event listeners when popup opens
+                    marker.on('popupopen', (e) => {
+                        const popup = e.popup;
+                        // Delete pin * execution *
+                        const deleteButton = document.getElementById(`deleteButton${restroom.id}`);
+                        if (deleteButton) {
+                            deleteButton.addEventListener("click", (event) => {
+                                event.stopPropagation(); // Eliminate issue of clicking map behind button while clicking button
+                                deleteRestroom(restroom.id, marker)
+                            });
+                        }
+                        // Update pin * execution *
+                        const showEditFormButton = document.getElementById(`showEditFormButton${restroom.id}`);
+                        if (showEditFormButton) {
+                            showEditFormButton.addEventListener("click", (event) => {
+                                event.stopPropagation(); // Eliminate issue of clicking map behind button while clicking button
+                                showEditForm(restroom, popup, marker)
+                            });
+                        }
+                    });
+        }
+        
+        // Delete pin * definition *
+        function deleteRestroom(restroomId, marker) {
+            fetch(`/restrooms/${restroomId}`, {
                 method:"DELETE",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({ image_filename: image_filename }) // send image_filename to backend to be deleted
             })
             .then(response => {
                 if (!response.ok) throw new Error('failed to delete restroom');
@@ -88,11 +119,71 @@
             });
         }
 
-        // Update pin
-        
+        // Update pin * definition *
+        function showEditForm(restroom, popup, marker) {
+            const formHtml = `
+                <form id="editForm" enctype="multipart/form-data">
+                    <label>Name: <input type="text" name="name" /></label><br/>
+                    <label>Rating (1-5): <input type="number" name="rating" min="1" max="5" ></label><br/>
+                    <label>Image File: <input type="file" name="image_file" accept="image/*" /></label><br/>
+                    <button type="submit" id="updateButton">Update</button>
+                </form>            
+            `;
 
-        // Click handler to show form popup
-        map.on('click', function(event) {
+            // Replace popup content
+            popup.setContent(formHtml);
+            // Redirect back to display popup if update page is closed
+            marker.once('popupclose', () => {
+                setTimeout(() => {
+                    renderDisplayPopup(marker, restroom);
+                    marker.openPopup();
+                }, 50); // Small delay to avoid immediate close
+            });
+
+            
+            setTimeout(() => { // Slight delay to ensure DOM is fully rendered
+                const form = document.getElementById('editForm');
+                if (form) {
+                    form.addEventListener('submit', function(event) {
+                        event.preventDefault();
+
+                        const formData = new FormData(form);
+                        for (let [key, value] of formData.entries()) {
+                            if (value === "" || value === "null" || value === undefined) {
+                                formData.delete(key);
+                            }
+                        }
+
+                        fetch(`/restrooms/${restroom.id}`, {
+                            method: "PATCH",
+                            body: formData
+                        })
+                            .then(async response => {
+                                if (!response.ok) {
+                                    const error = await response.text();
+                                    throw new Error(error);
+                                }
+                                return response.json();
+                            })
+                            .then(json => {
+                                alert("Restroom updated!");
+                                map.closePopup();
+
+                                renderDisplayPopup(marker, json);
+                                marker.openPopup();
+                            })
+                            .catch(error => {
+                                alert("Error: " + error.message);
+                            });
+                    });
+                }
+            }, 100);
+        }
+
+
+
+        // Add pin * definition *
+        function addRestroom(event) {
             const { lat, lng } = event.latlng;
 
             const formHtml = `
@@ -110,8 +201,8 @@
                 .setContent(formHtml)
                 .openOn(map);
 
-            // Slight delay to ensure DOM is fully rendered
-            setTimeout(() => {
+
+            setTimeout(() => { // Slight delay to ensure DOM is fully rendered
                 const form = document.getElementById('restroomForm');
                 if (form) {
                     form.addEventListener('submit', function(ev) {
@@ -127,8 +218,8 @@
                         })
                             .then(async response => {
                                 if (!response.ok) {
-                                    const err = await response.text();
-                                    throw new Error(err);
+                                    const error = await response.text();
+                                    throw new Error(error);
                                 }
                                 return response.json();
                             })
@@ -137,19 +228,16 @@
                                 map.closePopup();
 
                                 const marker = L.marker([lat, lng]).addTo(map);
-                                let popupHtml = `<strong>${json.name}</strong><br/>Rating: ${json.rating}`;
-                                if (json.image_filename) {
-                                    popupHtml += `<br/><img src="/uploads/${json.image_filename}" width="100" />`;
-                                }
-                                marker.bindPopup(popupHtml).openPopup();
+                                renderDisplayPopup(marker, json);
+                                marker.openPopup();
                             })
                             .catch(err => {
-                                alert("Error: " + err.message);
+                                alert("Error: " + error.message);
                             });
                     });
                 }
             }, 100);
-        })
+        }
     </script>
 
 </body>

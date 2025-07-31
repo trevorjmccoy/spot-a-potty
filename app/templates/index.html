@@ -131,36 +131,69 @@
                     <label>Name: <input type="text" name="name" /></label><br/>
                     <label>Rating (1-5): <input type="number" name="rating" min="1" max="5" ></label><br/>
                     <label>Image File: <input type="file" name="image_file" accept="image/*" /></label><br/>
-                    <button type="submit" id="updateButton">Update</button>
+                    <button type="button" id="updateButton">Update</button>
                 </form>            
             `;
 
             // Replace popup content
             popup.setContent(formHtml);
+
+            // Make marker moveable to adjust location
+            marker.dragging.enable();
+            let isDragging = false;
+            // Detach old drag listeners
+            marker.off('dragstart');
+            marker.off('dragend');
+            // Attach new drag listeners
+            marker.on('dragstart', () => {
+                isDragging = true;
+            });
+            marker.on('dragend', () => {
+                isDragging = false;
+                const position = marker.getLatLng();
+                restroom.latitude = position.lat;
+                restroom.longitude = position.lng;
+                marker.openPopup();
+            });
+
             // Redirect back to display popup if update page is closed
             marker.once('popupclose', () => {
                 setTimeout(() => {
-                    renderDisplayPopup(marker, restroom);
-                    marker.openPopup();
+                    if (!isDragging) { // ignores clicking off when dragging
+                        renderDisplayPopup(marker, restroom);
+                        marker.openPopup();
+                    }
                 }, 50); // Small delay to avoid immediate close
             });
 
             
-            setTimeout(() => { // Slight delay to ensure DOM is fully rendered
-                const form = document.getElementById('editForm');
-                if (form) {
-                    form.addEventListener('submit', function(event) {
-                        event.preventDefault();
-                        // Update pin * execution *
-                        updatePin(restroom, form, marker);
-                    });
-                }
-            }, 100);
+            const attachHandler = () => {
+                setTimeout(() => { // Slight delay to ensure DOM is fully rendered
+                    const button = document.getElementById('updateButton')
+                    const form = document.getElementById('editForm');
+                    if (button && form) {
+                        button.addEventListener('click', () => {
+                            // Fix marker to new location
+                            marker.dragging.disable();
+                            // Update pin * execution *
+                            updatePin(restroom, form, marker);
+                        });
+                    }
+                }, 50);
+            };
+
+            marker.on('popupopen', attachHandler); // Attach handler for all future opens
+            attachHandler(); // Attach handler for first open
         }
 
         // Update pin * definition *
         function updatePin(restroom, form, marker) {
             const formData = new FormData(form);
+
+            // attach possible updated coordinates
+            formData.append("latitude", restroom.latitude);
+            formData.append("longitude", restroom.longitude);
+
             for (let [key, value] of formData.entries()) {
                 if (value === "" || value === "null" || value === undefined) {
                     formData.delete(key);

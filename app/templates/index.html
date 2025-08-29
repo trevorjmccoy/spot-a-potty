@@ -30,28 +30,28 @@
 
     <style>
         body {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        height: 100vh;
-        margin: 0;
-        background: #b2b2b2;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background: #b2b2b2;
         }
 
         .phone {
-        width: 375px;
-        height: 812px;
-        background: white;
-        border-radius: 40px;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-        overflow: hidden;
-        border: 8px solid black;
-        position: relative;
+            width: 375px;
+            height: 812px;
+            background: white;
+            border-radius: 40px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            overflow: hidden;
+            border: 8px solid black;
+            position: relative;
         }
 
         .phone-content {
-        width: 100%;
-        height: 100%;
+            width: 100%;
+            height: 100%;
         }
 
         #map {
@@ -61,7 +61,66 @@
             left: 0;
             right: 0;
         }
-        
+
+        #restroom-list {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+
+            background: #ffffff;
+            border-top-left-radius: 20px;
+            border-top-right-radius: 20px;
+            padding: 10px;
+            max-height: 30%;
+            overflow-y: auto;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.2);
+            z-index: 1000;
+        }
+
+            .restroom-card {
+            display: flex;
+            align-items: center;
+            background: #f0f2f3;
+            border-radius: 15px;
+            padding: 8px;
+            margin-bottom: 8px;
+        }
+
+            .restroom-card img {
+            width: 40px;
+            height: 40px;
+            object-fit: cover;
+            border-radius: 8px;
+            margin-right: 10px;
+        }
+
+            .restroom-info {
+            flex: 1;
+        }
+
+            .restroom-name {
+            font-weight: bold;
+            display: block;
+        }
+
+            .restroom-rating {
+            color: orange;
+        }
+
+            .restroom-distance {
+            background: #99d1f8;
+            padding: 2px 6px;
+            border-radius: 10px;
+            font-size: 0.8em;
+            margin-left: 5px;
+        }
+
+            .restroom-action {
+            margin-left: 8px;
+            cursor: pointer;
+        }
+
     </style>
 
 
@@ -70,6 +129,7 @@
     <div class="phone">
         <div class="phone-content">
             <div id="map"></div>
+            <div id="restroom-list"></div>
         </div>
     </div>
 
@@ -82,6 +142,19 @@
         // Mount tiles
         tiles.addTo(map);
 
+        // Get user location
+        let userLocation = null;
+        map.locate({watch: true});
+        function onLocationFound(e) {
+            userLocation = e.latlng;
+            console.log("User location:", userLocation);
+        }
+        function onLocationError(e) {
+            alert(e.message);
+        }
+        map.on('locationfound', onLocationFound);
+        map.on('locationerror', onLocationError);
+
         // Disable map click when popups are open 
         map.on('popupopen', () => {
             map.off('click');
@@ -92,20 +165,50 @@
         });
 
         // Fetch and display all saved restrooms
-        fetch('/restrooms/')
-            .then(response => {
-                if (!response.ok) throw new Error("Failed to fetch restrooms");
-                return response.json();
-            })
-            .then(restrooms => {
-                restrooms.forEach(restroom => {
-                    const marker = L.marker([restroom.latitude, restroom.longitude]).addTo(map);
-                    renderDisplayPopup(marker, restroom);
+        setTimeout(() => { // ensure userLocation is found before populating
+            fetch('/restrooms/')
+                .then(response => {
+                    if (!response.ok) throw new Error("Failed to fetch restrooms");
+                    return response.json();
+                })
+                .then(restrooms => {
+                    const listContainer = document.getElementById('restroom-list');
+                    listContainer.innerHTML = ''; // clear before re-render
+
+                    restrooms.forEach(restroom => {
+                        // Add marker
+                        const marker = L.marker([restroom.latitude, restroom.longitude]).addTo(map);
+                        renderDisplayPopup(marker, restroom);
+
+                        // Build list card
+                        const card = document.createElement('div');
+                        const distanceToRestroom = (userLocation.distanceTo(L.latLng(restroom.latitude, restroom.longitude)) / 1609.34).toFixed(1);
+
+                        card.className = 'restroom-card';
+
+                        card.innerHTML = `
+                            <img src="/uploads/${restroom.image_filename || 'toiletpaper.png'}" />
+                            <div class="restroom-info">
+                                <span class="restroom-name">${restroom.name}</span>
+                                <span class="restroom-rating">${'⭐'.repeat(restroom.rating)+'⚪'.repeat(5 - restroom.rating)}</span>
+                                <span class="restroom-distance">${distanceToRestroom} mi</span>
+                            </div>
+                            <div class="restroom-action">🚶‍♂️</div>
+                        `;
+
+                        // Hook interactions
+                        card.addEventListener('click', () => {
+                            map.flyTo([restroom.latitude, restroom.longitude], 18);
+                            marker.openPopup();
+                        });
+
+                        listContainer.appendChild(card);
+                    });
+                })
+                .catch(err => {
+                    console.error("Error loading restrooms:", err);
                 });
-            })
-            .catch(err => {
-                console.error("Error loading restrooms:", err);
-            });
+            }, 1000);
 
         // Add pin * execution *
         map.on('click', addRestroom);
@@ -174,6 +277,7 @@
                 ]
             }).addTo(map);
         }
+        
         // Delete pin * definition *
         function deleteRestroom(restroomId, marker) {
             fetch(`/restrooms/${restroomId}`, {

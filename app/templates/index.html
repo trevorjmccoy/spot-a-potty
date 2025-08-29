@@ -3,6 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Spot-a-Potty</title>
+    <!-- Favicon for all modern browsers -->
+    <link rel="icon" type="image/x-icon" href="/static/favicon/favicon.ico">
+    <link rel="shortcut icon" type="image/x-icon" href="/static/favicon/favicon.ico">
+    <!-- PNG versions for better resolution on some browsers -->
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon/favicon-16x16.png">
+
+    <!-- Leaflet connection -->
     <link 
         rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
         integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
@@ -13,7 +23,37 @@
         integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
         crossorigin=""
     ></script>
+
+        <!-- Leaflet Routing Machine -->
+        <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.css" />
+        <script src="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.js"></script>
+
     <style>
+        body {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        margin: 0;
+        background: #b2b2b2;
+        }
+
+        .phone {
+        width: 375px;
+        height: 812px;
+        background: white;
+        border-radius: 40px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        overflow: hidden;
+        border: 8px solid black;
+        position: relative;
+        }
+
+        .phone-content {
+        width: 100%;
+        height: 100%;
+        }
+
         #map {
             position: absolute;
             top: 0;
@@ -21,12 +61,17 @@
             left: 0;
             right: 0;
         }
+        
     </style>
-    <title>Document</title>
+
+
 </head>
 <body>
-    
-    <div id="map"></div>
+    <div class="phone">
+        <div class="phone-content">
+            <div id="map"></div>
+        </div>
+    </div>
 
     <script>
         // Create map, tiles, and attribution display
@@ -72,6 +117,7 @@
                     Rating: ${restroom.rating}<br/>
                     <button type="button" id="deleteButton${restroom.id}">Delete</button>
                     <button type="button" id="renderEditPopupButton${restroom.id}">Edit</button>
+                    <button type="button" id="getDirectionsButton${restroom.id}">Get Directions</button>
             `;
             if (restroom.image_filename) {
                 popupHtml += `<br/><img src="/uploads/${restroom.image_filename}" width="100" />`;
@@ -100,6 +146,14 @@
                         renderEditPopup(restroom, marker.getPopup(), marker);
                     });
                 }
+                // Get directions * execution *
+                const getDirectionsButton = document.getElementById(`getDirectionsButton${restroom.id}`)
+                if (getDirectionsButton) {
+                    getDirectionsButton.addEventListener("click", (event) => {
+                        event.stopPropagation(); // Eliminate issue of clicking map behind button while clicking button
+                        getDirections(restroom);
+                    });
+                }
             };
             // Attach event listeners when popup opens
             marker.on('popupopen', attachHandlers);
@@ -109,6 +163,17 @@
             }
         }
         
+        // Get directions * definition *
+        function getDirections(restroom) {
+            const currentLocation = L.latLng(42.0001, -71.3292);
+
+            L.Routing.control({
+                waypoints: [
+                    currentLocation,
+                    L.latLng(restroom.latitude, restroom.longitude)
+                ]
+            }).addTo(map);
+        }
         // Delete pin * definition *
         function deleteRestroom(restroomId, marker) {
             fetch(`/restrooms/${restroomId}`, {

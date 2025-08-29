@@ -9,6 +9,8 @@ app = FastAPI()
 
 # Mount uploads directory
 app.mount("/uploads", StaticFiles(directory="app/uploads"), name="uploads")
+# Mount static files
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 # Register the API routes from routes.py
 app.include_router(router)

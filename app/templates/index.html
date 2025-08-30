@@ -109,9 +109,9 @@
         }
 
             .restroom-distance {
-            background: #99d1f8;
+            background: #94cef895;
             padding: 2px 6px;
-            border-radius: 10px;
+            border-radius: 6px;
             font-size: 0.8em;
             margin-left: 5px;
         }
@@ -148,6 +148,7 @@
         function onLocationFound(e) {
             userLocation = e.latlng;
             console.log("User location:", userLocation);
+            fetchAndRenderRestrooms()
         }
         function onLocationError(e) {
             alert(e.message);
@@ -165,7 +166,7 @@
         });
 
         // Fetch and display all saved restrooms
-        setTimeout(() => { // ensure userLocation is found before populating
+        function fetchAndRenderRestrooms() {
             fetch('/restrooms/')
                 .then(response => {
                     if (!response.ok) throw new Error("Failed to fetch restrooms");
@@ -208,7 +209,7 @@
                 .catch(err => {
                     console.error("Error loading restrooms:", err);
                 });
-            }, 1000);
+            }
 
         // Add pin * execution *
         map.on('click', addRestroom);
@@ -277,7 +278,7 @@
                 ]
             }).addTo(map);
         }
-        
+
         // Delete pin * definition *
         function deleteRestroom(restroomId, marker) {
             fetch(`/restrooms/${restroomId}`, {
